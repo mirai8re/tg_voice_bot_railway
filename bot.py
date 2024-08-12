@@ -33,7 +33,7 @@ async def voice_message_handler(message: Message):
             transcription = openai.Audio.transcribe("whisper-1", audio_file)
 
         user_text = transcription["text"]
-        await message.reply(f"You said: {user_text}")
+        # await message.reply(f"You said: {user_text}")
 
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -41,7 +41,7 @@ async def voice_message_handler(message: Message):
         )
 
         answer_text = response['choices'][0]['message']['content']
-        await message.reply(f"Answer: {answer_text}")
+        # await message.reply(f"Answer: {answer_text}")
 
         audio_file_path = "response.mp3"
         tts = gTTS(text=answer_text, lang='en')

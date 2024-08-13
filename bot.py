@@ -6,21 +6,23 @@ from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.types import Message
 import openai
-from gtts import gTTS
 from aiogram.types import FSInputFile
-
+from openai import OpenAI, OpenAIError
 
 load_dotenv()
 
 bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
 openai.api_key = os.getenv("OPENAI_API_KEY")
 router = Router()
+client = OpenAI()
+
 
 @router.message(CommandStart())
 async def start_command_handler(message: Message):
     await message.reply("HI! 👋\n\nYou can send me voice messages, and I will transcribe them and respond!")
 
-@router.message(F.voice)
+
+ @router.message(F.voice)
 async def voice_message_handler(message: Message):
     try:
         voice_file_id = message.voice.file_id
@@ -30,27 +32,66 @@ async def voice_message_handler(message: Message):
         await bot.download_file(file_info.file_path, destination=voice_file_path)
 
         with open(voice_file_path, "rb") as audio_file:
-            transcription = openai.Audio.transcribe("whisper-1", audio_file)
+            transcription = client.audio.transcriptions.create(file=audio_file, model='whisper-1')
 
-        user_text = transcription["text"]
+        user_text = transcription.text
         # await message.reply(f"You said: {user_text}")
 
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": user_text}]
+        assistant = client.beta.assistants.create(
+            name="Voice Assistant",
+            instructions="You are a helpful assistant.",
+            model="gpt-4o",
+        )
+        thread = client.beta.threads.create()
+        client.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=user_text
         )
 
-        answer_text = response['choices'][0]['message']['content']
-        # await message.reply(f"Answer: {answer_text}")
+        run = client.beta.threads.runs.create_and_poll(
+            thread_id=thread.id,
+            assistant_id=assistant.id
+        )
 
-        audio_file_path = "response.mp3"
-        tts = gTTS(text=answer_text, lang='en')
-        tts.save(audio_file_path)
+        answer_text = ''
+        if run.status == 'completed':
+            messages = client.beta.threads.messages.list(thread_id=thread.id)
+            for message_block in messages:
+                if message_block.role == 'assistant':
+                    # print(message_block)
+                    for text_content_block in message_block.content:
+                        # print(text_content_block)
+                        # print(type(text_content_block))
+                        if hasattr(text_content_block, 'text') and hasattr(text_content_block.text, 'value'):
+                            answer_text = text_content_block.text.value
+                            # print(answer_text)
+                            break
+
+            if not answer_text:
+                answer_text = "I'm sorry, I didn't get a valid response."
+
+            # await message.reply(f"Assistant's response: {answer_text}")
+        else:
+            await message.reply("Error with assistant response.")
+
+        try:
+            with client.audio.speech.with_streaming_response.create(
+                    model='tts-1',
+                    voice='onyx',
+                    input=answer_text,
+            ) as response:
+                with open('response.mp3', 'wb') as f:
+                    for chunk in response.iter_bytes():
+                        f.write(chunk)
+        except OpenAIError as e:
+            print(f"An error occurred while trying to fetch the audio stream: {e}")
+
+        audio_file_path = 'response.mp3'
 
         try:
             audio_file = FSInputFile(audio_file_path)
             await message.answer_audio(audio=audio_file)
-
         except Exception as e:
             print(f"Error: {e}")
             await message.reply("An error occurred while sending the audio file")
@@ -66,12 +107,13 @@ async def voice_message_handler(message: Message):
         print(f"Error: {e}")
 
 
-
 async def main():
     dp = Dispatcher()
     dp.include_router(router)
     await dp.start_polling(bot)
 
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     asyncio.run(main())
+

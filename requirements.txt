@@ -1,5 +1,6 @@
-   aiogram
-   openai==0.28
-   gtts
-   python-dotenv
+aiogram
+openai
+python-dotenv
+     
+
    

@@ -34,7 +34,7 @@ async def voice_message_handler(message: Message):
             transcription = await client.audio.transcriptions.create(file=audio_file, model='whisper-1')
 
         user_text = transcription.text
-        await message.reply(f"You said: {user_text}")
+        # await message.reply(f"You said: {user_text}")
 
         assistant = await client.beta.assistants.create(
             name="Voice Assistant",
@@ -65,11 +65,11 @@ async def voice_message_handler(message: Message):
             if not answer_text:
                 answer_text = "I'm sorry, I didn't get a valid response."
 
-            await message.reply(f"Assistant's response: {answer_text}")
+            # await message.reply(f"Assistant's response: {answer_text}")
         else:
             await message.reply("Error, please try again.")
 
-        # Генерация аудио из текста
+      
         try:
             with await client.audio.speech.with_streaming_response.create(
                     model='tts-1',
@@ -91,7 +91,7 @@ async def voice_message_handler(message: Message):
             print(f"Error: {e}")
             await message.reply("An error occurred while sending the audio file")
 
-        # Удаление временных файлов
+
         finally:
             if os.path.exists(voice_file_path):
                 os.remove(voice_file_path)
